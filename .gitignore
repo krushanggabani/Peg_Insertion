@@ -1,0 +1,38 @@
+# ───────── VETRIS (.gitignore) ─────────
+
+# Python bytecode / packaging
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+
+# Virtual envs
+rfEnv/
+bullet_env/
+
+
+# Caches & tooling
+.pytest_cache/
+.vscode/
+
+
+# OS cruft
+.DS_Store
+
+
+# Project outputs and Data
+runs/**
+results/**
+data/real/**
+data/
+extra/
+
+
+!data/media/**
+!docs/img/**
