@@ -120,7 +120,9 @@ HUD displays current step size.
 
 The vertical motion obeys a virtual mass‑damper‑spring with force feedback:
 
-[ m \dot v + b v + k (z - z_{ref}) = F_d - F_{meas} ]
+$$
+m \dot{v} + b v + k (z - z_{\text{ref}}) = F_d - F_{\text{meas}}
+$$
 
 * Vertical velocity is clamped; lateral corrections use average contact normals to reduce side loads.
 * Force limits guard against spikes.
