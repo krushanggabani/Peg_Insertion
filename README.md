@@ -5,7 +5,7 @@
 > * **Scenario 1 — Tele‑op:** drive the gripper with the keyboard.
 > * **Scenario 2 — Agent:** a scripted, **force‑aware** agent runs an **admittance‑controlled** insertion.
 
-<video width="600" controls>
+<video width="800" controls>
   <source src="logs/scenario2_agent_test_1.mp4" type="video/mp4">
   Your browser does not support the video tag.
 </video>
