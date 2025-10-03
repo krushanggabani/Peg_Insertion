@@ -53,9 +53,9 @@ python run_scenario1_teleop.py
 
 * **Translation:**
 
-  * `W/S`: forward/back
-  * `A/D`: left/right
-  * `R/F`: up/down
+  * `s/x`: forward/back
+  * `z/x`: left/right
+  * `a/d`: up/down
 
 * **Rotation:**
 

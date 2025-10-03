@@ -10,10 +10,8 @@ import pybullet as p
 import pybullet_data
 import numpy as np
 
-# Reuse your Robotiq85 class as-is:
-# from your_module import Robotiq85
-# and your mesh loader
-# from your_module import load_mesh
+from utils import Robotiq85, load_mesh  # adjust import to your file structure
+
 
 DEFAULT_LOG_HEADERS = [
     # commanded
@@ -56,7 +54,8 @@ class EnvConfig:
     joint_closed_rad: float = 0.0
 
     # initial object placement
-    peg_start: Tuple[float,float,float] = (0.20, 0.20, 0.05)
+    peg_start: Tuple[float,float,float] = (0.0, 0.20, 0.1)
+    peg_orn  : Tuple[float,float,float] = (0,90,0)
     cuboid_start: Tuple[float,float,float] = (0.0, -0.20, 0.05)
     gripper_start: Tuple[float,float,float] = (0.0, 0.50, 0.20)
     gripper_start_rpy: Tuple[float,float,float] = (math.pi, 0.0, 0.0)
@@ -72,15 +71,14 @@ class PegInsertionEnv:
     - Peg/cuboid/table are dynamic (except plane and possibly cuboid if you prefer fixed).
     - Logs commanded & actual states + contact forces every step.
     """
-    def __init__(self, cfg: EnvConfig,
-                 robotiq_cls,
-                 load_mesh_fn):
+    def __init__(self, cfg: EnvConfig):
         self.cfg = cfg
-        self._robotiq_cls = robotiq_cls
-        self._load_mesh_fn = load_mesh_fn
+        self._robotiq_cls = Robotiq85
+        self._load_mesh_fn = load_mesh
 
         self.client = p.connect(p.GUI if cfg.gui else p.DIRECT)
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
+        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
         p.resetSimulation()
         p.setGravity(0, 0, cfg.g)
         p.setTimeStep(cfg.time_step)
@@ -101,31 +99,31 @@ class PegInsertionEnv:
         self.gripper = self._robotiq_cls(cfg.gripper_start, cfg.gripper_start_rpy)
         self.gripper.load()  # your class parses joints & builds gear constraints
 
-        # Spawn objects
+        for link_id in [3, 8]:
+            p.changeDynamics(self.gripper.id, link_id,
+                     lateralFriction=1000.0,
+                     spinningFriction=1.0,
+                     frictionAnchor=1)
+            
+        # ---- Spawn objects (keep your paths as-is) ----
         self.cuboid_id = load_mesh_fn_rel(self._load_mesh_fn, cfg.assets_root, "cuboid.stl",
-                                          pos=cfg.cuboid_start, mass=1.0, mesh_scale=0.001, fixed=False)
+                                        pos=cfg.cuboid_start, mass=0.0, mesh_scale=0.001, fixed=False)
+
+        cfg.peg_orn = p.getQuaternionFromEuler(cfg.peg_orn)
+        # Use a realistic mass so contacts are stable (0.25–0.5 kg is good for small pegs)
         self.peg_id    = load_mesh_fn_rel(self._load_mesh_fn, cfg.assets_root, "peg.stl",
-                                          pos=cfg.peg_start, mass=0.1, mesh_scale=0.001, fixed=False)
-        
-        # Put the camera closer and point it to the middle of cuboid and peg
-        cub_pos, _ = p.getBasePositionAndOrientation(self.cuboid_id)
-        peg_pos, _ = p.getBasePositionAndOrientation(self.peg_id)
+                                        pos=cfg.peg_start, orn=cfg.peg_orn,mass=0.35, mesh_scale=0.001, fixed=False)
 
 
 
-        target = [(cub_pos[0] + peg_pos[0]) / 2,
-          (cub_pos[1] + peg_pos[1]) / 2,
-          (cub_pos[2] + peg_pos[2]) / 2 + 0.05]  # a little above
 
         p.resetDebugVisualizerCamera(
-            cameraDistance=0.35,   # smaller = closer
-            cameraYaw=35,          # rotate around horizontally
-            cameraPitch=-35,       # tilt downward
-            cameraTargetPosition=target
+            cameraDistance=2.00,   # smaller = closer
+            cameraYaw=91,          # rotate around horizontally
+            cameraPitch=-30.60,       # tilt downward
+            cameraTargetPosition=(-1.19,0.00,-0.66)
         )
 
-        # Optionally make cuboid heavier / fixed for stability in early testing
-        # p.changeDynamics(self.cuboid_id, -1, mass=5.0)  # or set fixed=True above
 
         # Set material/friction for all links
         for body in [self.gripper.id, self.cuboid_id, self.peg_id]:
@@ -148,7 +146,7 @@ class PegInsertionEnv:
             self.cfg.gripper_start,
             p.getQuaternionFromEuler(self.cfg.gripper_start_rpy))
         p.resetBasePositionAndOrientation(self.cuboid_id, self.cfg.cuboid_start, [0,0,0,1])
-        p.resetBasePositionAndOrientation(self.peg_id, self.cfg.peg_start, [0,0,0,1])
+        p.resetBasePositionAndOrientation(self.peg_id, self.cfg.peg_start, self.cfg.peg_orn)
 
         # open gripper
         self.command_jaw_separation(self.cfg.jaw_open_m)

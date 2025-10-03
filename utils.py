@@ -8,7 +8,7 @@ ASSETS_ROOT = "/home/krushang/Desktop/Research/OLD/Extra_env/Bullet_Project/asse
 
 
 # ---------- Base robot ----------
-class RobotBase(object):
+class UR5Robotiq85(object):
     """
     Minimal base class that can also support 'gripper-only' robots by setting arm_num_dofs = 0.
     """
@@ -23,8 +23,9 @@ class RobotBase(object):
 
         # Defaults for 'gripper-only' robots; subclasses can override
         self.arm_num_dofs = 0
-        self.arm_rest_poses = []
         self.eef_id = None
+        self.gripper_range = [0, 0.085]
+        self.max_velocity = 10
 
     def load(self):
         self.__init_robot__()
@@ -70,18 +71,6 @@ class RobotBase(object):
         for j in self.joints:
             print(f"ID {j.id:2d} | {j.name:30s} | Type {j.type} | Limits ({j.lowerLimit:.3f},{j.upperLimit:.3f})")
 
-        # Arm support is optional
-        if self.arm_num_dofs > 0:
-            assert len(self.controllable_joints) >= self.arm_num_dofs, "Not enough controllable joints for the arm."
-            self.arm_controllable_joints = self.controllable_joints[:self.arm_num_dofs]
-            self.arm_lower_limits = [j.lowerLimit for j in self.joints if j.controllable][:self.arm_num_dofs]
-            self.arm_upper_limits = [j.upperLimit for j in self.joints if j.controllable][:self.arm_num_dofs]
-            self.arm_joint_ranges = [up - lo for lo, up in zip(self.arm_lower_limits, self.arm_upper_limits)]
-        else:
-            self.arm_controllable_joints = []
-            self.arm_lower_limits = []
-            self.arm_upper_limits = []
-            self.arm_joint_ranges = []
 
     def __init_robot__(self):
         raise NotImplementedError
@@ -109,7 +98,7 @@ class RobotBase(object):
 
 
 # ---------- Robotiq 2F-85 (gripper-only) ----------
-class Robotiq85(RobotBase):
+class Robotiq85(UR5Robotiq85):
     def __init_robot__(self):
         # Load URDF
         urdf_path = "/home/krushang/Desktop/Research/Roboforce/Peg_Insertion/assets/urdf/robotiq_85.urdf"
@@ -117,9 +106,7 @@ class Robotiq85(RobotBase):
             urdf_path,
             self.base_pos,
             self.base_ori,
-            useFixedBase=True,
-            flags=p.URDF_ENABLE_CACHED_GRAPHICS_SHAPES
-        )
+            useFixedBase=True)
 
 
         # Gripper is standalone: no arm DoFs
@@ -162,14 +149,14 @@ class Robotiq85(RobotBase):
         }
 
         # Disable motors so constraints control them
-        for nm, mult in MIMIC_CHILDREN.items():
-            if nm not in self.name_to_idx:
-                raise RuntimeError(f"Mimic child joint '{nm}' not found in URDF.")
-            jidx = self.name_to_idx[nm]
-            p.setJointMotorControl2(self.id, jidx, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
+        # for nm, mult in MIMIC_CHILDREN.items():
+        #     if nm not in self.name_to_idx:
+        #         raise RuntimeError(f"Mimic child joint '{nm}' not found in URDF.")
+        #     jidx = self.name_to_idx[nm]
+        #     p.setJointMotorControl2(self.id, jidx, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
 
-        # Also disable parent motor; we'll command it explicitly
-        p.setJointMotorControl2(self.id, self.mimic_parent_idx, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
+        # # Also disable parent motor; we'll command it explicitly
+        # p.setJointMotorControl2(self.id, self.mimic_parent_idx, p.VELOCITY_CONTROL, targetVelocity=0, force=0)
 
         # Create gear constraints
         self._gear_cids = []
@@ -198,8 +185,15 @@ class Robotiq85(RobotBase):
             controlMode=p.POSITION_CONTROL,
             targetPosition=angle,
             positionGain=0.6,
-            force=80.0
+            force=50.0,
+            maxVelocity = self.max_velocity
         )
+        # import math
+        # open_angle = 0.715 - math.asin((angle_rad - 0.010) / 0.1143)  # angle calculation
+        # Control the mimic gripper joint(s)
+        # p.setJointMotorControl2(self.id, self.mimic_parent_idx, p.POSITION_CONTROL, targetPosition=angle,
+        #                         force=self.joints[self.mimic_parent_idx].maxForce, maxVelocity=self.joints[self.mimic_parent_idx].maxVelocity)
+
 
     def open_gripper(self):
         self.move_gripper(self.gripper_range[1])
@@ -209,19 +203,31 @@ class Robotiq85(RobotBase):
 
 
 
-def load_mesh(filename, pos=(0, 0, 0), mass=1.0, mesh_scale=1.0, fixed=False):
+def load_mesh(filename, pos=(0, 0, 0), orn=(0, 0, 0, 1),
+              mass=1.0, mesh_scale=1.0, fixed=False):
     if not os.path.isabs(filename):
         filename = os.path.join(ASSETS_ROOT, filename)
     if not os.path.isfile(filename):
         raise FileNotFoundError(f"Mesh not found: {filename}")
+
     scale_vec = [mesh_scale] * 3
-    col = p.createCollisionShape(p.GEOM_MESH, fileName=filename, meshScale=scale_vec)
-    vis = p.createVisualShape(p.GEOM_MESH, fileName=filename, meshScale=scale_vec, rgbaColor=[0.2, 0.6, 0.9, 1.0])
+    col = p.createCollisionShape(
+        p.GEOM_MESH,
+        fileName=filename,
+        meshScale=scale_vec
+    )
+    vis = p.createVisualShape(
+        p.GEOM_MESH,
+        fileName=filename,
+        meshScale=scale_vec,
+        rgbaColor=[0.2, 0.6, 0.9, 1.0]
+    )
     body = p.createMultiBody(
         baseMass=(0.0 if fixed else float(mass)),
         baseCollisionShapeIndex=col,
         baseVisualShapeIndex=vis,
         basePosition=list(pos),
+        baseOrientation=list(orn)  # <-- orientation added
     )
     return body
 
